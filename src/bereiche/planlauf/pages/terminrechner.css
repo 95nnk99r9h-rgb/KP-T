@@ -1,0 +1,2 @@
+.terminrechner .segmented { display: flex; }
+.terminrechner .segmented button { flex: 1; white-space: normal; }

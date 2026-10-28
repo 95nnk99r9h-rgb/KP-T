@@ -1,0 +1,767 @@
+/**
+ * Planlauf-Logik: Weg durch die Workflow bestimmen, Soll-Termine aus
+ * Fristen rechnen, Ampelstatus vergeben und offene Aufgaben einsammeln.
+ */
+import { ablaufGraph, bereiteSchritte, istFertig, istFreigegeben } from './ablaufGraph';
+import { addDays, diffDays, today } from '../../../shared/dates';
+import {
+  EIGENE_ROLLE,
+  INDEX_LABEL,
+  STANDARD_BEARBEITER,
+  hatEigenenPlanlauf,
+  type DocumentKind,
+  type Antwort,
+  type AppData,
+  type Contact,
+  type Role,
+  type ID,
+  type ISODate,
+  type PlanDocument,
+  type PlanRun,
+  type ProcessTemplate,
+  type ProcessTemplateStep,
+  type Project,
+  type RunStep,
+} from './types';
+
+export type Ampel = 'erledigt' | 'ueberfaellig' | 'faellig' | 'geplant' | 'neutral';
+
+export const AMPEL_LABEL: Record<Ampel, string> = {
+  erledigt: 'Erledigt',
+  ueberfaellig: 'Überfällig',
+  faellig: 'Fällig',
+  geplant: 'Im Plan',
+  neutral: 'Ohne Termin',
+};
+
+/* ------------------------------------------------------------------ */
+/* Weg durch die Kette                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Die Antwort, die den weiteren Verlauf bestimmt (ohne Auswahl: die erste). */
+export function massgeblicheAntwort(step: { antworten: Antwort[]; gewaehlteAntwortId?: ID | null }): Antwort | undefined {
+  if (step.antworten.length === 0) return undefined;
+  const gewaehlt = step.antworten.find((a) => a.id === step.gewaehlteAntwortId);
+  return gewaehlt ?? step.antworten[0];
+}
+
+/**
+ * Der Nachfolger eines Schritts: bei Entscheidungen das Ziel der maßgeblichen
+ * Antwort, sonst der hinterlegte Nachfolger. `null` heißt „nächster Schritt“.
+ */
+export function zielVonSchritt(step: ProcessTemplateStep | RunStep): ID | 'ende' | null {
+  if (step.typ === 'entscheidung' && step.antworten.length > 0) {
+    return massgeblicheAntwort(step)?.ziel ?? null;
+  }
+  return step.naechster ?? null;
+}
+
+/** Ergebnis der Ablaufverfolgung durch eine Kette. */
+export interface Verlauf<T> {
+  /** Die durchlaufenen Schritte in ihrer Reihenfolge. */
+  schritte: T[];
+  /**
+   * Schritt, zu dem am Ende zurückgesprungen wird (Schleife, z.B. Überarbeitung).
+   * Der Ablauf wird an dieser Stelle erneut aufgenommen.
+   */
+  rueckSprungZu: T | null;
+  /** true, wenn der Ablauf durch eine Antwort ausdrücklich beendet wird. */
+  beendet: boolean;
+}
+
+/**
+ * Verfolgt den Ablauf durch die Kette.
+ *
+ * Schritte werden der Reihe nach abgearbeitet; eine Entscheidung springt
+ * gemäß der maßgeblichen Antwort zu einem anderen Schritt, zum Ende oder
+ * (ohne Ziel) zum unmittelbar folgenden Schritt. Führt eine Antwort zu einem
+ * bereits durchlaufenen Schritt zurück, endet der Ablauf nicht – der Schritt
+ * wird als Rücksprungziel gemeldet, damit die Schleife sichtbar bleibt und die
+ * Verfolgung nicht endlos läuft.
+ */
+export function verlaufDerKette<T extends ProcessTemplateStep | RunStep>(steps: T[]): Verlauf<T> {
+  const graph = ablaufGraph(steps);
+  return {
+    schritte: graph.schritte,
+    rueckSprungZu: steps.find((s) => s.id === graph.rueckkanten[0]?.nach) ?? null,
+    beendet: graph.rueckkanten.length === 0,
+  };
+}
+
+/** Reihenfolge der tatsächlich durchlaufenen Schritte. */
+export function pfad<T extends ProcessTemplateStep | RunStep>(steps: T[]): T[] {
+  return verlaufDerKette(steps).schritte;
+}
+
+/** Schritte, die im aktuellen Verlauf nicht durchlaufen werden. */
+export function nichtImPfad<T extends ProcessTemplateStep | RunStep>(steps: T[]): T[] {
+  const drin = new Set(pfad(steps).map((s) => s.id));
+  return steps.filter((s) => !drin.has(s.id));
+}
+
+/* ------------------------------------------------------------------ */
+/* Termine                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Rechnet die Soll-Termine der Schrittkette neu durch.
+ *
+ * Regel: Fristende = tatsächlicher Eingang + Frist. Ohne Eingang wird nur
+ * eine Prognose gerechnet. Ein manuell
+ * gesetztes Soll-Datum bleibt erhalten; Nachfolger starten trotzdem erst
+ * mit dem tatsächlichen Ist-Eingang. Schritte außerhalb des aktuellen Verlaufs erhalten
+ * keinen Termin.
+ */
+export function recalcSollDaten(
+  steps: RunStep[],
+  start: ISODate,
+  arbeitstage: boolean,
+  feiertage: ISODate[],
+  /**
+   * Soll-Termin für den Eingang der Unterlage. Ist er hinterlegt, hat der
+   * erste Schritt keine Frist, sondern genau dieses Datum; die folgenden
+   * Fristen rechnen von dort weiter.
+   */
+  eingangSoll: ISODate | null = null,
+): RunStep[] {
+  const graph = ablaufGraph(steps);
+  const gerechnet = new Map<ID, RunStep>();
+  for (const step of graph.schritte) {
+    const ids = graph.vorgaenger.get(step.id) ?? [];
+    const vorher = ids.map((id) => gerechnet.get(id) ?? steps.find((s) => s.id === id));
+    const bereit = vorher.every((s) => s && istFertig(s) && s.istDatum && (!(step.wartetAuf ?? []).includes(s.id) || istFreigegeben(s)));
+    const letzter = (werte: (string | null | undefined)[]) => werte.filter((x): x is string => Boolean(x)).sort().at(-1) ?? null;
+    const erster = step.id === steps[0]?.id;
+    const eingang = step.eingangOverride || (erster ? start : bereit ? letzter(vorher.map((s) => s?.istDatum)) : null);
+    const basis = eingang ?? letzter(vorher.map((s) => s?.istDatum ?? s?.prognoseDatum ?? s?.sollDatum)) ?? start;
+    const frist = step.fristOverride ?? step.fristTage;
+    const berechnet = erster && eingangSoll && !step.eingangOverride ? eingangSoll : addDays(basis, frist, arbeitstage, feiertage);
+    const soll = step.sollManuell && step.sollDatum ? step.sollDatum : eingang ? berechnet : null;
+    // Abgeschlossene Durchläufe behalten die damals geltenden Fristen.
+    const fertig = istFertig(step) && step.eingangDatum !== undefined;
+    gerechnet.set(step.id, {
+      ...step,
+      eingangDatum: fertig ? step.eingangDatum : eingang,
+      sollDatum: fertig ? step.sollDatum : soll,
+      prognoseDatum: fertig ? step.istDatum ?? step.sollDatum : soll ?? berechnet,
+    });
+  }
+  return steps.map((s) => gerechnet.get(s.id) ?? (istFertig(s) ? s : { ...s, sollDatum: null, prognoseDatum: null, eingangDatum: null }));
+}
+
+/** Rechnet einen kompletten Lauf mit den Projekteinstellungen durch. */
+export function recalcRun(
+  run: PlanRun,
+  project: Project | undefined,
+  doc?: { eingangSoll: ISODate | null },
+): PlanRun {
+  // Ein neu gestarteter Lauf bleibt zum Nachschlagen so stehen, wie er endete –
+  // ein neues Eingang Soll des Eintrags gilt nur noch für den neuen Lauf.
+  if (run.status === 'abgebrochen') return run;
+  const arbeitstage = project?.settings.fristenInArbeitstagen ?? true;
+  const feiertage = project?.settings.feiertage ?? [];
+  return {
+    ...run,
+    steps: recalcSollDaten(run.steps, run.start, arbeitstage, feiertage, doc?.eingangSoll ?? null),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Status                                                              */
+/* ------------------------------------------------------------------ */
+
+export function ampelFuerSchritt(step: RunStep, vorlaufTage: number): Ampel {
+  if (step.status === 'erledigt' || step.status === 'uebersprungen') return 'erledigt';
+  if (!step.sollDatum || step.eingangDatum === null) return 'neutral';
+  const delta = diffDays(today(), step.sollDatum);
+  if (delta < 0) return 'ueberfaellig';
+  if (delta <= vorlaufTage) return 'faellig';
+  return 'geplant';
+}
+
+/** Der erste nicht erledigte Schritt im aktuellen Verlauf. */
+export function aktuellerSchritt(run: PlanRun): RunStep | undefined {
+  return aktuelleSchritte(run).sort((a, b) => (a.sollDatum ?? '9999').localeCompare(b.sollDatum ?? '9999'))[0];
+}
+
+/** Alle gleichzeitig bearbeitbaren Schritte; Zusammenführungen warten auf alle Vorgänger. */
+export function aktuelleSchritte(run: PlanRun): RunStep[] {
+  return run.status === 'laufend' ? bereiteSchritte(run.steps) : [];
+}
+
+export function fortschritt(run: PlanRun): number {
+  const reihenfolge = pfad(run.steps);
+  if (!reihenfolge.length) return 0;
+  if (reihenfolge.every(istFertig)) return 100;
+  const gewicht = (s: RunStep) => Math.max(0, s.fristOverride ?? s.fristTage);
+  const gesamt = reihenfolge.reduce((n, s) => n + gewicht(s), 0);
+  const erledigt = reihenfolge.filter(istFertig);
+  const anteil = gesamt ? erledigt.reduce((n, s) => n + gewicht(s), 0) / gesamt : erledigt.length / reihenfolge.length;
+  // Auch ein noch offener Null-Tage-Meilenstein verhindert „100 %“.
+  return Math.min(99, Math.round(anteil * 100));
+}
+
+/** Verzug des Laufs in Tagen (>0 = überfällig), bezogen auf den aktuellen Schritt. */
+export function verzugTage(run: PlanRun): number {
+  const step = aktuellerSchritt(run);
+  if (!step?.sollDatum) return 0;
+  const delta = diffDays(today(), step.sollDatum);
+  return delta < 0 ? Math.abs(delta) : 0;
+}
+
+/**
+ * Hinweis zu einem abgebrochenen Lauf: ersatzlos beendet oder durch einen
+ * neuen Index bzw. eine neue Ausgabe ersetzt.
+ */
+export function abbruchHinweis(run: PlanRun, kind: DocumentKind = 'plan'): string {
+  if (run.status !== 'abgebrochen') return '';
+  if (run.abbruchArt === 'aufgeteilt') return 'in Einzelläufe der Pläne aufgeteilt';
+  if (run.abbruchArt === 'gebuendelt') return 'wieder im Planlauf des Verzeichnisses gebündelt';
+  if (run.abbruchArt === 'neu_gestartet') return 'mit geändertem Workflow neu gestartet';
+  if (run.abbruchArt !== 'neuer_index') return 'ersatzlos abgebrochen';
+  const label = INDEX_LABEL[kind];
+  return run.abbruchNeuerIndex ? `ersetzt durch ${label} ${run.abbruchNeuerIndex}` : `ersetzt durch neuen ${label}`;
+}
+
+/** Läuft noch und ist nicht abgebrochen. */
+export function istAktiv(run: PlanRun): boolean {
+  return run.status === 'laufend';
+}
+
+/* ------------------------------------------------------------------ */
+/* Auswertungen                                                        */
+/* ------------------------------------------------------------------ */
+
+export interface FristEintrag {
+  run: PlanRun;
+  step: RunStep;
+  project: Project;
+  ampel: Ampel;
+  tageBisSoll: number;
+}
+
+/**
+ * Alle offenen Schritte des aktuellen Verlaufs, sortiert nach Dringlichkeit.
+ * Abgebrochene und abgeschlossene Läufe bleiben außen vor.
+ */
+export function offeneFristen(data: AppData, projectIds?: ID[]): FristEintrag[] {
+  const eintraege: FristEintrag[] = [];
+  for (const run of eigenstaendigeLaeufe(data.documents, data.runs)) {
+    if (projectIds && !projectIds.includes(run.projectId)) continue;
+    if (!istAktiv(run)) continue;
+    const project = data.projects.find((p) => p.id === run.projectId);
+    if (!project) continue;
+    // Nur der jeweils anstehende Schritt ist offen – kommende Schritte
+    // erscheinen erst, wenn sie an der Reihe sind.
+    for (const step of aktuelleSchritte(run)) {
+    const ampel = ampelFuerSchritt(step, project.settings.erinnerungVorlaufTage);
+    if (ampel === 'erledigt') continue;
+    eintraege.push({
+      run,
+      step,
+      project,
+      ampel,
+      tageBisSoll: step.sollDatum ? diffDays(today(), step.sollDatum) : 9999,
+    });
+    }
+  }
+  return eintraege.sort((a, b) => a.tageBisSoll - b.tageBisSoll);
+}
+
+/**
+ * Anstehende Schritte im eigenen Verantwortungsbereich (Rolle des Bearbeiters).
+ * Berücksichtigt werden der jeweils aktuelle Schritt eines Laufs sowie bereits
+ * laufende Schritte – nicht dagegen Schritte, die erst später an die Reihe kommen.
+ */
+export function eigeneTodos(data: AppData, projectIds?: ID[]): FristEintrag[] {
+  const rolle = EIGENE_ROLLE.toLowerCase();
+  return offeneFristen(data, projectIds).filter((f) => f.step.roleName.trim().toLowerCase() === rolle);
+}
+
+/**
+ * Ermittelt die Person, die eine Rolle für ein bestimmtes Gewerk ausfüllt.
+ * Rollen ohne Gewerkbezug sind einmal für alle Gewerke besetzt.
+ */
+/**
+ * Funktionen, die für einen Eintrag eines Gewerks in Frage kommen: die des
+ * Gewerks und die übergreifenden – je Bezeichnung einmal. Ein Schritt merkt sich
+ * nur die Bezeichnung; welche Funktion und damit welche Person gemeint ist,
+ * ergibt sich aus dem Gewerk des Eintrags (siehe kontaktFuerRolleUndGewerk).
+ * Ohne Gewerk kommen alle Funktionen in Frage.
+ */
+export function funktionenFuerGewerk(rollen: Role[], gewerk: string): string[] {
+  const passend = rollen.filter((r) => !gewerk || r.gewerk === null || r.gewerk === gewerk);
+  return [...new Set(passend.map((r) => r.name))];
+}
+
+export function kontaktFuerRolleUndGewerk(
+  kontakte: Contact[],
+  rollen: Role[],
+  roleName: string,
+  gewerk: string,
+): ID | null {
+  const gleich = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const passende = rollen.filter((r) => gleich(r.name, roleName));
+  // Funktion des Gewerks; ersatzweise die übergreifende Funktion gleichen Namens
+  const rolle = passende.find((r) => r.gewerk === gewerk) ?? passende.find((r) => r.gewerk === null);
+  if (!rolle) return null;
+  return kontakte.find((c) => c.zuordnungen.some((z) => z.roleId === rolle.id))?.id ?? null;
+}
+
+/** Name eines Planlaufs: Codierung bzw. Titel des Eintrags, dazu Index bzw. Ausgabe. */
+export function planlaufName(eintrag: { kind: DocumentKind; nummer: string; titel: string; index: string }): string {
+  return `Planlauf ${eintrag.nummer || eintrag.titel}${
+    eintrag.index ? ` ${INDEX_LABEL[eintrag.kind]} ${eintrag.index}` : ''
+  }`;
+}
+
+/**
+ * Neuer Planlauf eines Eintrags nach einem Workflow: die Schritte der Vorlage,
+ * die Zuständigen nach der Besetzung der Funktionen für das Gewerk des Eintrags.
+ * Planläufe starten immer mit dem Eintrag – beim Anlegen wie beim Import.
+ */
+export function planlaufAusWorkflow(
+  vorlage: ProcessTemplate,
+  eintrag: {
+    projectId: ID;
+    documentId: ID;
+    kind: DocumentKind;
+    nummer: string;
+    titel: string;
+    index: string;
+    gewerk: string;
+  },
+  kontakte: Contact[],
+  rollen: Role[],
+  start: ISODate,
+  newId: () => string,
+): Omit<PlanRun, 'id'> {
+  return {
+    projectId: eintrag.projectId,
+    documentId: eintrag.documentId,
+    templateId: vorlage.id,
+    templateName: vorlage.name,
+    name: planlaufName(eintrag),
+    index: eintrag.index,
+    start,
+    status: 'laufend',
+    abbruchGrund: null,
+    abbruchDatum: null,
+    abbruchArt: null,
+    abbruchNeuerIndex: null,
+    steps: stepsAusTemplate(
+      vorlage,
+      (roleName) => kontaktFuerRolleUndGewerk(kontakte, rollen, roleName, eintrag.gewerk),
+      newId,
+    ),
+    bemerkung: '',
+  };
+}
+
+/**
+ * Eigenständig geführte Planläufe.
+ *
+ * Maßgeblich ist hatEigenenPlanlauf: Pläne eines gebündelten Verzeichnisses
+ * laufen im Lauf des Verzeichnisses mit, ein Verzeichnis mit Plänen einzeln
+ * hat selbst keinen Lauf. Läufe, die nach dieser Regel nicht (mehr) zählen –
+ * etwa der Lauf eines später zugeordneten Plans –, bleiben erhalten, gelten
+ * aber nicht als eigenständig.
+ */
+/**
+ * Lauf, der nicht abgebrochen, sondern in eine andere Form überführt wurde:
+ * aufgeteilt in Einzelläufe, wieder im Verzeichnis gebündelt oder mit
+ * geändertem Workflow neu gestartet. Solche Läufe zählen nicht als Abbruch
+ * des Eintrags.
+ */
+export function laufUeberfuehrt(run: Pick<PlanRun, 'status' | 'abbruchArt'>): boolean {
+  return (
+    run.status === 'abgebrochen' &&
+    (run.abbruchArt === 'aufgeteilt' || run.abbruchArt === 'gebuendelt' || run.abbruchArt === 'neu_gestartet')
+  );
+}
+
+export function eigenstaendigeLaeufe(documents: PlanDocument[], runs: PlanRun[]): PlanRun[] {
+  return runs.filter((r) => {
+    const doc = documents.find((d) => d.id === r.documentId);
+    return !doc || hatEigenenPlanlauf(doc, documents);
+  });
+}
+
+/**
+ * Übernimmt einen Planlauf samt Stand für einen anderen Eintrag – etwa wenn
+ * ein Plan aus dem gebündelten Lauf seines Verzeichnisses herausgelöst wird.
+ * Erledigte Schritte bleiben erledigt, der offene Schritt bleibt offen, Start
+ * und Termine laufen weiter. Schritte und Antworten erhalten neue Kennungen;
+ * Verweise (Nachfolger, Antwortziele, gewählte Antwort) werden umgebogen.
+ */
+export function laufUebernehmen(
+  quelle: PlanRun,
+  ziel: { documentId: ID; name: string; index: string; bemerkung: string },
+  neueId: (prefix: string) => ID,
+): Omit<PlanRun, 'id'> {
+  const schrittIds = new Map(quelle.steps.map((s) => [s.id, neueId('rs')]));
+  const antwortIds = new Map(quelle.steps.flatMap((s) => s.antworten.map((a) => [a.id, neueId('ant')] as const)));
+  const umbiegen = (z: ID | 'ende' | null) => (z === 'ende' || z === null ? z : (schrittIds.get(z) ?? null));
+  return {
+    projectId: quelle.projectId,
+    documentId: ziel.documentId,
+    templateId: quelle.templateId,
+    templateName: quelle.templateName,
+    name: ziel.name,
+    index: ziel.index,
+    start: quelle.start,
+    status: 'laufend',
+    abbruchGrund: null,
+    abbruchDatum: null,
+    abbruchArt: null,
+    abbruchNeuerIndex: null,
+    bemerkung: ziel.bemerkung,
+    steps: quelle.steps.map((s) => {
+      return {
+        ...s,
+        id: schrittIds.get(s.id)!,
+        historie: s.historie?.map((h) => ({ ...h, stand: { ...h.stand, id: schrittIds.get(s.id)! } })),
+        naechster: umbiegen(s.naechster),
+        parallelNachfolger: s.parallelNachfolger?.map((id) => schrittIds.get(id)!).filter(Boolean),
+        wartetAuf: s.wartetAuf?.map((id) => schrittIds.get(id)!).filter(Boolean),
+        nachreichungFuer: s.nachreichungFuer ? schrittIds.get(s.nachreichungFuer) : undefined,
+        nachreichungAntwortId: s.nachreichungAntwortId ? antwortIds.get(s.nachreichungAntwortId) : undefined,
+        nachreichungOriginalZiel: s.nachreichungOriginalZiel === undefined ? undefined : umbiegen(s.nachreichungOriginalZiel),
+        antworten: s.antworten.map((a) => ({ ...a, id: antwortIds.get(a.id)!, ziel: umbiegen(a.ziel) })),
+        gewaehlteAntwortId: s.gewaehlteAntwortId ? (antwortIds.get(s.gewaehlteAntwortId) ?? null) : null,
+      };
+    }),
+  };
+}
+
+/**
+ * Laufende Nummerierung der Pläne und Planverzeichnisse eines Projekts.
+ *
+ * Planverzeichnisse und Einzelpläne werden in der Reihenfolge ihrer Anlage
+ * fortlaufend nummeriert; die Pläne eines Verzeichnisses erhalten dessen
+ * Nummer mit angehängtem Zähler (3.1, 3.2 …). Planpakete bleiben ohne Nummer.
+ * Gelöschte Einträge geben ihre Nummer wieder frei, da stets neu durchgezählt
+ * wird; abgebrochene Einträge behalten sie, weil der Eintrag bestehen bleibt.
+ */
+export function lfdNummern(documents: PlanDocument[]): Map<ID, string> {
+  const nummern = new Map<ID, string>();
+  const eintraege = documents.filter((d) => d.kind !== 'paket');
+  const istKind = (d: PlanDocument) =>
+    d.kind === 'plan' && d.parentId !== null && eintraege.some((x) => x.id === d.parentId);
+
+  let zaehler = 0;
+  for (const d of eintraege) {
+    if (!istKind(d)) nummern.set(d.id, String(++zaehler));
+  }
+
+  const unterZaehler = new Map<ID, number>();
+  for (const d of eintraege) {
+    if (!istKind(d)) continue;
+    const eltern = nummern.get(d.parentId!);
+    if (!eltern) continue;
+    const n = (unterZaehler.get(d.parentId!) ?? 0) + 1;
+    unterZaehler.set(d.parentId!, n);
+    nummern.set(d.id, `${eltern}.${n}`);
+  }
+  return nummern;
+}
+
+/** Erzeugt aus einer Vorlage die Schritte eines neuen Laufs. */
+export function stepsAusTemplate(
+  template: ProcessTemplate,
+  contactFuerRolle: (roleName: string) => ID | null,
+  newId: () => string,
+): RunStep[] {
+  // Schritt-IDs werden neu vergeben; Antwortziele müssen mitgezogen werden.
+  const idMap = new Map<ID, ID>();
+  template.steps.forEach((s) => idMap.set(s.id, newId()));
+
+  return template.steps.map((s) => ({
+    id: idMap.get(s.id)!,
+    name: s.name,
+    parallelNachfolger: s.parallelNachfolger?.map((id) => idMap.get(id)!).filter(Boolean),
+    wartetAuf: s.wartetAuf?.map((id) => idMap.get(id)!).filter(Boolean),
+    typ: s.typ,
+    roleName: s.roleName,
+    contactId: contactFuerRolle(s.roleName),
+    contactManuell: false,
+    fristTage: s.fristTage,
+    sollDatum: null,
+    sollManuell: false,
+    istDatum: null,
+    status: 'offen' as const,
+    abweichung: false,
+    bemerkung: s.beschreibung,
+    letzteErinnerung: null,
+    antworten: s.antworten.map((a) => ({
+      id: newId(),
+      text: a.text,
+      ziel: a.ziel === 'ende' || a.ziel === null ? a.ziel : (idMap.get(a.ziel) ?? null),
+    })),
+    naechster: s.naechster === 'ende' || s.naechster === null ? s.naechster : (idMap.get(s.naechster) ?? null),
+    gewaehlteAntwortId: null,
+    durchlauf: 1,
+    nachweis: s.nachweis,
+    nachweisNummer: null,
+    mailFrage: s.mailFrage,
+    mailVorlageId: s.mailVorlageId,
+  }));
+}
+
+/**
+ * Bearbeitbare Kopie der Schritte eines Workflows für einen neuen Planlauf –
+ * mit neuen IDs und umgebogenen Antwortzielen. Die Vorlage selbst bleibt
+ * unberührt.
+ */
+export function vorlagenSchritte(
+  vorlage: ProcessTemplate | undefined,
+  neueId: (prefix: string) => string,
+): ProcessTemplateStep[] {
+  if (!vorlage) return [];
+  const idMap = new Map(vorlage.steps.map((s) => [s.id, neueId('ts')]));
+  const umbiegen = (ziel: ID | 'ende' | null) => (ziel === 'ende' || ziel === null ? ziel : (idMap.get(ziel) ?? null));
+  return vorlage.steps.map((s) => ({
+    ...s,
+    id: idMap.get(s.id)!,
+    // „Weiter mit“ und Antwortziele zeigen auf die neuen IDs – sonst gingen Sprünge verloren
+    naechster: umbiegen(s.naechster),
+    parallelNachfolger: s.parallelNachfolger?.map((id) => idMap.get(id)!).filter(Boolean),
+    wartetAuf: s.wartetAuf?.map((id) => idMap.get(id)!).filter(Boolean),
+    antworten: s.antworten.map((a) => ({
+      ...a,
+      id: neueId('ant'),
+      ziel: umbiegen(a.ziel),
+    })),
+  }));
+}
+
+/**
+ * Schritte eines neuen Planlaufs aus den für ihn bearbeiteten Workflow-
+ * Schritten. Was vom Workflow abweicht – andere Zahl, Bezeichnung, Frist,
+ * Funktion oder Art –, wird als Abweichung gekennzeichnet.
+ */
+export function laufSchritteAusVorlage(
+  vorlage: ProcessTemplate | undefined,
+  bearbeitet: ProcessTemplateStep[],
+  kontaktFuerRolle: (roleName: string) => ID | null,
+  neueId: () => string,
+): RunStep[] {
+  const schritte = stepsAusTemplate(
+    { id: vorlage?.id ?? '', projectId: null, name: '', beschreibung: '', herkunft: 'manuell', steps: bearbeitet },
+    kontaktFuerRolle,
+    neueId,
+  );
+  const original = vorlage?.steps ?? [];
+  return schritte.map((s, i) => {
+    const o = original[i];
+    const abweichend =
+      !o ||
+      original.length !== schritte.length ||
+      o.name !== s.name ||
+      o.fristTage !== s.fristTage ||
+      o.roleName !== s.roleName ||
+      o.typ !== s.typ;
+    return abweichend ? { ...s, abweichung: true } : s;
+  });
+}
+
+/**
+ * Bewahrt den vollständigen Stand vor einem neuen Durchlauf. Noch offene
+ * Verzugszeiträume enden am tatsächlichen Rücklauf bzw. Wiederöffnungsdatum.
+ */
+export function archiviereSchritt(s: RunStep, grund: string, bis = today()): RunStep {
+  const { historie = [], ...stand } = s;
+  return { ...s, historie: [...historie, {
+    id: `hist-${s.id}-${s.durchlauf}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    archiviertAm: new Date().toISOString(), grund, stand: { ...structuredClone(stand), verzugBis: bis },
+  }] };
+}
+
+export function rueckSprungAnwenden(steps: RunStep[], ausloeserId: ID, zielId: ID): RunStep[] {
+  const graph = ablaufGraph(steps);
+  const ausloeser = steps.find((s) => s.id === ausloeserId);
+  if (!ausloeser || !steps.some((s) => s.id === zielId)) return steps;
+  // Nur die vom Rücksprung erreichten Schritte bis zum Auslöser neu öffnen.
+  const betroffen = new Set<ID>();
+  const erreicht = (id: ID, pfadIds: ID[]): boolean => {
+    if (pfadIds.includes(id)) return false;
+    if (id === ausloeserId) { [...pfadIds, id].forEach((x) => betroffen.add(x)); return true; }
+    let gefunden = false;
+    for (const k of graph.kanten.filter((k) => k.von === id)) gefunden = erreicht(k.nach, [...pfadIds, id]) || gefunden;
+    return gefunden;
+  };
+  erreicht(zielId, []);
+  betroffen.add(zielId);
+  if (ausloeser.nachreichungFuer !== zielId) {
+    // Der volle Rücklauf entwertet auch bereits erteilte Parallelfreigaben.
+    // Nur die ausdrücklich gewählte direkte Nachreichung bewahrt sie.
+    const standard = ablaufGraph(steps.map((s) => ({ ...s, gewaehlteAntwortId: null })));
+    const alleKanten = [...graph.kanten, ...standard.kanten];
+    const besuchen = (id: ID, gesehen = new Set<ID>()) => {
+      if (gesehen.has(id)) return;
+      gesehen.add(id); betroffen.add(id);
+      for (const k of alleKanten.filter((k) => k.von === id)) besuchen(k.nach, gesehen);
+    };
+    besuchen(zielId);
+  }
+  return steps.map((s) => {
+    if (!betroffen.has(s.id)) return s;
+    const archiv = archiviereSchritt(s, `Rücklauf von „${ausloeser.name}“`, ausloeser.istDatum ?? today());
+    return {
+      ...archiv, status: s.id === zielId ? 'laufend' : 'offen',
+      istDatum: null, eingangDatum: null, prognoseDatum: null,
+      eingangOverride: s.id === zielId ? ausloeser.istDatum ?? today() : null,
+      sollDatum: null, sollManuell: false, nachweisNummer: null,
+      letzteErinnerung: null, erinnerungen: [], verzugZuordnungen: [], verzugBis: undefined,
+      fristOverride: s.id === zielId && ausloeser.nachreichungFuer === zielId ? ausloeser.nachreichungFrist : undefined,
+      antworten: s.id === zielId && ausloeser.nachreichungFuer === zielId && ausloeser.nachreichungAntwortId
+        ? s.antworten.map((a) => a.id === ausloeser.nachreichungAntwortId ? { ...a, ziel: ausloeser.nachreichungOriginalZiel ?? null } : a)
+        : s.antworten,
+      durchlauf: (s.durchlauf ?? 1) + 1,
+      gewaehlteAntwortId: null,
+    };
+  });
+}
+
+/**
+ * Gewerke, die in einem Projekt zur Auswahl stehen: die gepflegten Stammdaten
+ * und zusätzlich jedes Gewerk, für das das Projekt eine Funktion führt. So
+ * passen Planliste, Planläufe und der Reiter „Funktion“ immer zusammen.
+ */
+export function gewerkeFuerProjekt(
+  data: Pick<AppData, 'gewerke' | 'roles'>,
+  projectId: ID,
+): string[] {
+  const ausRollen = data.roles
+    .filter((r) => r.projectId === projectId)
+    .map((r) => r.gewerk)
+    .filter((g): g is string => Boolean(g));
+  return [...new Set([...data.gewerke, ...ausRollen])].sort((a, b) => a.localeCompare(b, 'de'));
+}
+
+/* ------------------------------------------------------------------ */
+/* Eigener Kontakt in den markierten Projekten                         */
+/* ------------------------------------------------------------------ */
+
+/** Zerlegt den angezeigten Namen in Vor- und Nachname. */
+function namensTeile(name: string): { vorname: string; nachname: string } {
+  const teile = name.trim().split(/\s+/);
+  if (teile.length < 2) return { vorname: teile[0] ?? '', nachname: '' };
+  return { vorname: teile.slice(0, -1).join(' '), nachname: teile[teile.length - 1] };
+}
+
+/**
+ * Führt die angemeldete Person in jedem markierten Projekt und
+ * besetzt dort das Planlaufmanagement.
+ *
+ * Markiert jemand ein Projekt („meine Projekte“), ist er dort immer der
+ * Zuständige des Planlaufmanagements – auch wenn er dort noch nicht
+ * geführt wurde. Der Eintrag wird deshalb bei jeder Änderung angelegt bzw.
+ * nachgezogen, die Funktion bei anderen Kontakten desselben Projekts
+ * entfernt und die zugehörigen Schritte laufender Planläufe umgehängt.
+ */
+export function eigeneKontakteSichern(daten: AppData, neueId: (prefix: string) => string): AppData {
+  const { vorname, nachname } = namensTeile(daten.bearbeiter?.name || STANDARD_BEARBEITER);
+  let contacts = daten.contacts;
+  let geaendert = false;
+
+  for (const projekt of daten.projects.filter((p) => p.markiert)) {
+    const rolle = daten.roles.find(
+      (r) => r.projectId === projekt.id && r.name === EIGENE_ROLLE && r.gewerk === null,
+    );
+    const vorhanden = contacts.find((c) => c.projectId === projekt.id && c.eigen);
+
+    // Eintrag anlegen oder Namen und Funktion nachziehen
+    let eigenerId: ID;
+    if (!vorhanden) {
+      eigenerId = neueId('con');
+      contacts = [
+        {
+          id: eigenerId,
+          projectId: projekt.id,
+          anrede: '',
+          vorname,
+          nachname,
+          firma: EIGENE_ROLLE,
+          email: '',
+          telefon: '',
+          anschrift: '',
+          zuordnungen: rolle ? [{ roleId: rolle.id, gewerk: null }] : [],
+          notiz: '',
+          eigen: true,
+        },
+        ...contacts,
+      ];
+      geaendert = true;
+    } else {
+      eigenerId = vorhanden.id;
+      const fehlt = rolle ? !vorhanden.zuordnungen.some((z) => z.roleId === rolle.id) : false;
+      if (vorhanden.vorname !== vorname || vorhanden.nachname !== nachname || fehlt) {
+        contacts = contacts.map((c) =>
+          c.id === eigenerId
+            ? {
+                ...c,
+                vorname,
+                nachname,
+                zuordnungen: fehlt ? [...c.zuordnungen, { roleId: rolle!.id, gewerk: null }] : c.zuordnungen,
+              }
+            : c,
+        );
+        geaendert = true;
+      }
+    }
+
+    // Das Planlaufmanagement ist in diesem Projekt allein Sache der eigenen Person
+    if (rolle) {
+      const doppelt = contacts.some(
+        (c) => c.projectId === projekt.id && c.id !== eigenerId && c.zuordnungen.some((z) => z.roleId === rolle.id),
+      );
+      if (doppelt) {
+        contacts = contacts.map((c) =>
+          c.projectId === projekt.id && c.id !== eigenerId
+            ? { ...c, zuordnungen: c.zuordnungen.filter((z) => z.roleId !== rolle.id) }
+            : c,
+        );
+        geaendert = true;
+      }
+    }
+
+  }
+
+  return geaendert ? { ...daten, contacts } : daten;
+}
+
+/**
+ * Zieht die Zuständigkeiten laufender Planläufe aus der Besetzung nach.
+ *
+ * Ein Schritt nennt eine Funktion; wer sie ausfüllt, steht unter Rollen &
+ * Funktionen des Projekts. Wird eine Person erst später eingetragen oder wechselt sie
+ * während des Projekts, gilt die neue Besetzung sofort – auch für bereits
+ * gestartete Planläufe. Von Hand gesetzte Personen (`contactManuell`) und
+ * abgeschlossene Schritte bleiben unangetastet: sie halten fest, wer den
+ * Schritt tatsächlich bearbeitet hat.
+ */
+export function zustaendigkeitenNachziehen(daten: AppData): AppData {
+  let geaendert = false;
+
+  const runs = daten.runs.map((run) => {
+    if (run.status !== 'laufend') return run;
+    const kontakte = daten.contacts.filter((c) => c.projectId === run.projectId);
+    const rollen = daten.roles.filter((r) => r.projectId === run.projectId);
+    const gewerk = daten.documents.find((d) => d.id === run.documentId)?.gewerk ?? '';
+
+    let laufGeaendert = false;
+    const steps = run.steps.map((step) => {
+      if (step.contactManuell || step.status === 'erledigt') return step;
+      const contactId = kontaktFuerRolleUndGewerk(kontakte, rollen, step.roleName, gewerk);
+      if (contactId === step.contactId) return step;
+      laufGeaendert = true;
+      return { ...step, contactId };
+    });
+    if (!laufGeaendert) return run;
+    geaendert = true;
+    return { ...run, steps };
+  });
+
+  return geaendert ? { ...daten, runs } : daten;
+}
