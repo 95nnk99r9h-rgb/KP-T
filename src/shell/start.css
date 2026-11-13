@@ -1,0 +1,139 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand · redesign: full
+ * paper: oklch(97.6% 0.005 255) · accent: oklch(38.6% 0.08 255) · display: system sans · body: system sans
+ * nav: kept, KaPlan-Marke links und Mailänder-Wortmarke rechts, jetzt im Container · signature: das Bereichsregister, drei Zeilen zwischen kräftigen Linien wie ein Plan-Schriftfeld · states: hover, active, focus-visible, disabled
+ * axes: light/grotesk-sans/cool · posture: centred register · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4 · weakest: P, a launcher has little to argue; it takes the drawing register as its stance, rows over tiles, the descriptions readable at 16px */
+/* Hallmark · waive 39b · each bereich-zeile is a whole register row with name, Beschreibung and Stand, not a compact control · the row height follows its three lines of Beschreibung and the whole row is the hit target */
+@import url("./tokens.css");
+@import url("./base.css");
+
+/* Die Startseite scrollt selbst (#root ist 100 % hoch). */
+.start {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-color: var(--color-muted) var(--color-paper);
+  display: flex;
+  flex-direction: column;
+}
+
+.start-rahmen {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Kopf: Marke links, Wortmarke rechts, auf der Kante des Registers */
+.start-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-block: var(--space-lg);
+}
+.start-marke { width: 12.5rem; max-width: 60%; line-height: 0; }
+.start-logo { flex: none; display: flex; align-items: center; color: var(--color-accent); }
+
+/* Das Register steht mittig im verbleibenden Raum. */
+.start-haupt {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: var(--space-xl);
+}
+
+.start-titel {
+  margin-bottom: var(--space-md);
+  font-size: var(--text-2xl);
+  color: var(--color-ink);
+}
+
+.start-register {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-strong) solid var(--color-ink);
+  border-bottom: var(--rule-strong) solid var(--color-ink);
+}
+.start-register > li + li { border-top: var(--rule-hair) solid var(--color-rule); }
+
+/* Eine Zeile je Bereich: Symbol, Name, Beschreibung, Stand, Pfeil */
+.bereich-zeile {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 17rem) minmax(0, 1fr) 8.5rem 1.5rem;
+  grid-template-areas: "symbol kopf text stand pfeil";
+  align-items: start;
+  column-gap: var(--gap-columns);
+  width: 100%;
+  margin: 0;
+  padding: var(--space-lg) var(--space-md);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.bereich-zeile:hover { background: var(--color-paper-2); }
+.bereich-zeile:active { background: var(--color-paper-3); }
+.bereich-zeile:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.bereich-zeile:disabled { background: transparent; color: var(--color-muted); cursor: not-allowed; }
+
+.bereich-zeile-symbol { grid-area: symbol; padding-top: var(--space-3xs); color: var(--color-accent); }
+
+.bereich-zeile-kopf { grid-area: kopf; display: flex; flex-direction: column; gap: var(--space-2xs); min-width: 0; }
+.bereich-zeile-titel {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: var(--tracking-display);
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+.bereich-zeile-sub { font-size: var(--text-sm); color: var(--color-accent); }
+
+.bereich-zeile-text { grid-area: text; max-width: 60ch; padding-top: var(--space-2xs); color: var(--color-ink-2); }
+
+.bereich-zeile-stand { grid-area: stand; padding-top: var(--space-2xs); font-size: var(--text-sm); color: var(--color-muted); }
+
+.bereich-zeile-pfeil {
+  grid-area: pfeil;
+  align-self: center;
+  display: flex;
+  color: var(--color-muted);
+  transition: color var(--dur-micro) var(--ease-out);
+}
+.bereich-zeile:hover .bereich-zeile-pfeil,
+.bereich-zeile:focus-visible .bereich-zeile-pfeil { color: var(--color-accent); }
+
+.start-fuss { padding-bottom: var(--space-lg); }
+.start-fuss p {
+  padding-top: var(--space-lg);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+/* Schmal: Symbol und Name in einer Reihe, Beschreibung darunter, Stand und Pfeil am Fuß */
+@media (max-width: 52rem) {
+  .bereich-zeile {
+    grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
+    grid-template-areas:
+      "symbol kopf  pfeil"
+      ".      text  text"
+      ".      stand stand";
+    column-gap: var(--space-sm);
+    row-gap: var(--space-xs);
+    padding: var(--space-md) var(--space-2xs);
+  }
+  .bereich-zeile-symbol svg { width: 2rem; height: 2rem; }
+  .bereich-zeile-titel { font-size: var(--text-lg); }
+  .bereich-zeile-text, .bereich-zeile-stand { padding-top: 0; }
+  .bereich-zeile-stand:empty { display: none; }
+  .start-titel { font-size: var(--text-xl); }
+  .start-haupt { justify-content: flex-start; padding-block: var(--space-xs) var(--space-xl); }
+  .start-marke { width: 8.5rem; }
+  .start-logo svg { height: 26px; width: auto; }
+}

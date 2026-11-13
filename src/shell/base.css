@@ -1,0 +1,12 @@
+/* Grundregeln der Startseite. Bewusst auf .start begrenzt, damit die Bereiche unberührt bleiben. */
+html, body { overflow-x: clip; }
+.start { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); font-size: var(--text-md); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.start ::selection { background: color-mix(in oklab, var(--color-accent) 22%, transparent); color: var(--color-ink); }
+.start :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.start h1, .start h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-synthesis: none; letter-spacing: var(--tracking-display); line-height: 1.15; overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+.start p { margin: 0; text-wrap: pretty; }
+.start svg { display: block; }
+.start button { font: inherit; }
+@media (max-width: 60rem) { :root { --gutter: 24px; } }
+@media (max-width: 40rem) { :root { --gutter: 16px; --gap-columns: 16px; } }
+@media (prefers-reduced-motion: reduce) { .start *, .start *::before, .start *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
