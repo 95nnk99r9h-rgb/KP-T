@@ -1,0 +1,100 @@
+# Baut KaPlan und veröffentlicht den Build (siehe README, Abschnitt „Veröffentlichen“).
+#
+# Pull Requests: nur prüfen (Tests, Typprüfung und Build), nichts veröffentlichen.
+# Push auf main: den Build an drei Stellen ablegen –
+#   1. als GitHub-Pages-Bereitstellung (Quelle „GitHub Actions“),
+#   2. im Branch gh-pages (nur der Build, ohne Verlauf),
+#   3. im Ordner app/ auf main (für „Deploy from a branch“ mit main und / (root)).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    # Der Commit, mit dem dieser Workflow app/ erneuert, löst ihn nicht erneut aus.
+    paths-ignore: ['app/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bauen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Build für die Bereitstellung hochladen
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Build sichern
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: dist
+
+  app-ordner:
+    # Ordner app/ auf main und Branch gh-pages erneuern
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: bauen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: dist
+      - name: Git einrichten
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: app/ auf main erneuern
+        run: |
+          rm -rf app
+          cp -r dist app
+          git add -A app
+          if git diff --cached --quiet; then
+            echo "app/ ist bereits aktuell."
+          else
+            git commit -m "app/: Build von ${GITHUB_SHA::7}"
+            git push origin HEAD:main
+          fi
+      - name: Branch gh-pages erneuern
+        run: |
+          cd dist
+          touch .nojekyll
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Build von ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
+
+  bereitstellen:
+    # Greift nur bei der Pages-Quelle „GitHub Actions“; bei „Deploy from a branch“
+    # schlägt dieser Schritt fehl, ohne die anderen Wege zu beeinträchtigen.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: bauen
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
