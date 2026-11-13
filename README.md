@@ -532,6 +532,9 @@ Person automatisch das **Planlaufmanagement** und ist damit für dessen Schritte
 Unten links in der Seitenleiste stehen der eigene Name (bis zur Anmeldung je Person „Max
 Mustermann“), die Nachfrage nach E-Mails und der **Farbmodus für eine Rot-Grün-Sehschwäche**: er
 stellt Blaugrün, Bernstein und Magenta statt Grün, Orange und Rot dar und erhöht die Kontraste.
+Im Standardmodus zeigt der Bereich die Glasgestaltung der Startseite (weichgezeichnetes
+Hintergrundbild, durchscheinende Seitenleiste, Kopfzeile und Karten, Bewegung beim Überfahren);
+der Farbmodus für Rot-Grün-Sehschwäche bleibt bei deckenden Flächen.
 
 ### Projekteinstellungen
 Vorlaufzeit für Erinnerungen, Arbeitstage/Feiertage und Absenderangaben sowie – wie im Reiter
@@ -787,7 +790,6 @@ src/
     Shell.tsx    Wählt Bereichsauswahl oder Bereich
     Start.tsx    Startbildschirm mit den Karten der Bereiche
     start.css    Gestaltung des Startbildschirms (mit tokens.css und base.css, nur dort wirksam)
-    hintergrund.svg  Hintergrundbild des Startbildschirms, in start.css weichgezeichnet
     bereiche.ts  Verzeichnis der Bereiche
     router.ts    #/ · #/planlauf/… · #/baubetrieb/… · #/projektsteuerung/…
     BereichWechsel.tsx  Rückweg aus einem Bereich zur Bereichsauswahl
@@ -802,10 +804,12 @@ src/
     print.ts     Druckausgabe als Grundlage der PDF-Fassung
     pwa.ts       Registrierung des Service Workers
     global.css   Design-Tokens im hellen Apple-Erscheinungsbild
+    hintergrund.svg  Hintergrundbild von Startbildschirm und Planlaufmanagement, dort weichgezeichnet
   bereiche/
     planlauf/    Bereich „Planlaufmanagement“
       index.tsx  Einstiegspunkt samt Datenbestand des Bereichs
       App.tsx    Seitenleiste, Kopfzeile und Auswahl der Ansicht
+      planlauf.css  Glasgestaltung des Bereichs (nur im Standard-Farbmodus)
       domain/    Fachlogik ohne UI-Bezug
         types.ts     Datenmodell (Projekt, Rolle, Kontakt, Plan, Vorlage, Planlauf …)
         engine.ts    Verlauf durch die Kette, Fristenrechnung, Ampelstatus, To-Dos
