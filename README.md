@@ -13,7 +13,7 @@ KaPlan gliedert sich in drei getrennte Bereiche, zwischen denen der Startbildsch
   projektübergreifenden Funktionen und Besprechungsprotokolle mit Folgeprotokollen.
 
 Die Bereiche arbeiten unabhängig voneinander: eigener Datenbestand, eigener Speicherort im
-Browser, eigene Einstellungen, eigener Router. Der Startbildschirm zeigt sie als Kacheln; in einem
+Browser, eigene Einstellungen, eigener Router. Der Startbildschirm führt sie als Register untereinander auf; in einem
 Bereich führt **Bereich wechseln** unten in der Seitenleiste zurück. Der Abschnitt
 **Funktionsumfang** beschreibt das Planlaufmanagement, die Abschnitte
 [**Baubetriebsplanung**](#baubetriebsplanung) und [**Projektsteuerung**](#projektsteuerung) die
@@ -784,7 +784,8 @@ src/
   main.tsx       Start der Anwendung, Umlenkung alter Lesezeichen
   shell/         Startbildschirm und Bereichswechsel
     Shell.tsx    Wählt Bereichsauswahl oder Bereich
-    Start.tsx    Startbildschirm mit den Bereichskacheln
+    Start.tsx    Startbildschirm mit dem Register der Bereiche
+    start.css    Gestaltung des Startbildschirms (mit tokens.css und base.css, nur dort wirksam)
     bereiche.ts  Verzeichnis der Bereiche
     router.ts    #/ · #/planlauf/… · #/baubetrieb/… · #/projektsteuerung/…
     BereichWechsel.tsx  Rückweg aus einem Bereich zur Bereichsauswahl

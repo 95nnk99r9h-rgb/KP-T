@@ -35,9 +35,10 @@ angesprochen (`src/bereiche/planlauf/store/storage.ts`).
 Die Anwendung besteht aus drei getrennten Bereichen. Die erste Wegmarke der
 Adresse benennt den Bereich; die Shell (`src/shell/router.ts`) wählt danach
 aus, welcher Bereich geladen wird: `#/` zeigt die Bereichsauswahl
-(`src/shell/Start.tsx`: drei hochkante Kacheln nebeneinander – Planlaufmanagement,
-Baubetriebsplanung und Projektsteuerung, die beiden letzten mit dem Kennzeichen
-„Erster Entwurf“ aus `marke` in
+(`src/shell/Start.tsx`, Gestaltung in `src/shell/start.css`: unter der Überschrift
+„Bitte einen Bereich wählen.“ ein Register mit drei Zeilen untereinander – Planlaufmanagement,
+Baubetriebsplanung und Projektsteuerung, je Zeile Symbol, Name, Untertitel, Beschreibung und
+Stand; die beiden letzten mit dem Kennzeichen „Erster Entwurf“ aus `marke` in
 `src/shell/bereiche.ts`), `#/planlauf/…` das Planlaufmanagement,
 `#/baubetrieb/…` die Baubetriebsplanung (Abschnitt 7), `#/projektsteuerung/…` die
 Projektsteuerung (Abschnitt 8). Innerhalb des Bereichs adressiert ein Hash-Router ohne
