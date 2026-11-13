@@ -21,6 +21,7 @@ import { KaPlanLogo, MailaenderLogo } from '../../shared/logos';
 import { BereichWechsel } from '../../shell/BereichWechsel';
 import { SicherungEinspielenDialog, SicherungWaehlen, type Sicherung } from './components/SicherungEinspielen';
 import type { IconName } from '../../shared/icons';
+import './planlauf.css';
 
 export function App() {
   const { data, zuruecksetzen, speicherFehler } = useStore();
@@ -54,7 +55,8 @@ export function App() {
   const kopf = kopfzeile(route, projekt?.name, lauf?.name);
 
   return (
-    <div className="app">
+    // Glasgestaltung (planlauf.css) nur im Standardmodus; „kontrast“ bleibt deckend.
+    <div className={farbmodus === 'kontrast' ? 'app' : 'app app-glas'}>
       <aside className={`sidebar ${menuOffen ? 'open' : ''}`}>
         <button type="button" className="sidebar-brand" onClick={() => gehe({ view: 'dashboard' })} title="Zur Übersicht">
           <KaPlanLogo variante="Planlaufmanagement" width="100%" />

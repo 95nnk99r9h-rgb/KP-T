@@ -35,10 +35,11 @@ angesprochen (`src/bereiche/planlauf/store/storage.ts`).
 Die Anwendung besteht aus drei getrennten Bereichen. Die erste Wegmarke der
 Adresse benennt den Bereich; die Shell (`src/shell/router.ts`) wählt danach
 aus, welcher Bereich geladen wird: `#/` zeigt die Bereichsauswahl
-(`src/shell/Start.tsx`, Gestaltung in `src/shell/start.css`: unter der Überschrift
-„Bitte einen Bereich wählen.“ ein Register mit drei Zeilen untereinander – Planlaufmanagement,
-Baubetriebsplanung und Projektsteuerung, je Zeile Symbol, Name, Untertitel, Beschreibung und
-Stand; die beiden letzten mit dem Kennzeichen „Erster Entwurf“ aus `marke` in
+(`src/shell/Start.tsx`, Gestaltung in `src/shell/start.css`: vor dem
+weichgezeichneten Hintergrundbild `src/shared/hintergrund.svg` unter „Bereichsauswahl“ und der Überschrift
+„Bitte einen Bereich wählen.“ drei Glaskarten nebeneinander, schmal untereinander – Planlaufmanagement,
+Baubetriebsplanung und Projektsteuerung, je Karte Symbol, Name, Untertitel, Beschreibung,
+Stand und „Öffnen“; die beiden letzten mit dem Kennzeichen „Erster Entwurf“ aus `marke` in
 `src/shell/bereiche.ts`), `#/planlauf/…` das Planlaufmanagement,
 `#/baubetrieb/…` die Baubetriebsplanung (Abschnitt 7), `#/projektsteuerung/…` die
 Projektsteuerung (Abschnitt 8). Innerhalb des Bereichs adressiert ein Hash-Router ohne
@@ -146,6 +147,10 @@ abgefragt (`src/bereiche/planlauf/components/SchrittStatus.tsx`).
   'Max Mustermann'`), Schalter „Nachfragen zulassen, wenn ein Workflow-Schritt
   eine E-Mail vorsieht“ und Schalter „Farbmodus für Rot-Grün-Sehschwäche
   (hoher Kontrast)“.
+* **Gestaltung**: Im Farbmodus „standard“ trägt die Hülle die Klasse `app-glas`
+  (`src/bereiche/planlauf/App.tsx`, Regeln in `src/bereiche/planlauf/planlauf.css`):
+  weichgezeichnetes Hintergrundbild `src/shared/hintergrund.svg`, Seitenleiste, Kopfzeile,
+  Karten und Dialoge als Glas. Im Farbmodus „kontrast“ entfällt die Klasse.
 * **Sicherung**: lädt den gesamten Bestand als JSON herunter
   (`exportiereDaten`). **Einspielen**
   (`src/bereiche/planlauf/components/SicherungEinspielen.tsx`): wählt eine

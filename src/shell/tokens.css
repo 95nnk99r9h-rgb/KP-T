@@ -1,4 +1,4 @@
-/* Tokens der Startseite (Bereichswahl). Farben aus der Hausfarbe #24456e, Schrift wie im Rest der App. */
+/* Tokens der Startseite (Bereichswahl). Farben aus dem KaPlan-Logo, Schrift wie im Rest der App. */
 :root {
   --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
   --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-3xl: 2.074rem;
@@ -8,13 +8,18 @@
   --color-error: oklch(52% 0.19 27); --color-success: oklch(50% 0.12 150);
   --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
   --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
-  /* Papier kühl getönt zur Hausfarbe hin, Tinte fast schwarz im selben Farbton */
-  --color-paper: oklch(97.6% 0.005 255); --color-paper-2: oklch(94.6% 0.009 255); --color-paper-3: oklch(91.4% 0.013 255);
-  --color-ink: oklch(21% 0.022 255); --color-ink-2: oklch(35% 0.03 255); --color-muted: oklch(47% 0.022 255);
-  --color-rule: oklch(83% 0.014 255);
-  /* Hausfarbe #24456e */
-  --color-accent: oklch(38.6% 0.08 255); --color-accent-ink: oklch(98% 0.005 255); --color-focus: oklch(38.6% 0.08 255);
+  /* Farbschema „Gletscher“: helles Eisblau als Grund, Tinte im Dunkelblau des KaPlan-Logos,
+     Akzent im Azur der Wortmarke „Plan“. Die Bereiche tragen zurückhaltende Blautöne (start.css). */
+  --color-paper: oklch(96.5% 0.012 245); --color-paper-2: oklch(93% 0.02 245); --color-paper-3: oklch(89% 0.03 245);
+  --color-ink: oklch(23% 0.055 255); --color-ink-2: oklch(34% 0.05 255); --color-muted: oklch(44% 0.04 255);
+  --color-rule: oklch(100% 0 0 / 0.55);
+  --color-accent: oklch(58% 0.17 250); --color-accent-ink: oklch(99% 0.005 245); --color-focus: oklch(55% 0.19 250);
+  /* Glas: Füllung, Kante oben (Lichtkante), Kante unten und Schatten */
+  --glass-fill: oklch(100% 0 0 / 0.42); --glass-fill-hover: oklch(100% 0 0 / 0.6);
+  --glass-edge: oklch(100% 0 0 / 0.75); --glass-edge-low: oklch(100% 0 0 / 0.25);
+  --glass-blur: 22px; --glass-shadow: 0 1px 1px oklch(23% 0.055 255 / 0.06), 0 18px 40px -18px oklch(23% 0.08 255 / 0.35);
+  --glass-shadow-hover: 0 2px 2px oklch(23% 0.055 255 / 0.06), 0 34px 60px -24px oklch(23% 0.1 255 / 0.45);
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Helvetica Neue", system-ui, sans-serif; --font-body: var(--font-display); --font-outlier: var(--font-body);
-  --radius-card: 4px; --radius-pill: 999px; --rule-hair: 1px; --rule-strong: 2px; --shadow-card: none;
+  --radius-card: 26px; --radius-glass: 20px; --radius-pill: 999px; --rule-hair: 1px; --rule-strong: 2px; --shadow-card: none;
   --tracking-display: -0.015em;
 }

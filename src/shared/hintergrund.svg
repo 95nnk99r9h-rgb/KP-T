@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <!-- Hintergrundbild der Startseite und des Planlaufmanagements. Wird in
+       src/shell/start.css und src/bereiche/planlauf/planlauf.css stark weichgezeichnet:
+       Aus den Farbflächen und den Balken eines Bauzeitenplans werden weiche Schlieren. -->
+  <rect width="1600" height="1000" fill="#eef2f7"/>
+  <ellipse cx="260" cy="180" rx="420" ry="300" fill="#a9cdf0"/>
+  <ellipse cx="1350" cy="140" rx="380" ry="260" fill="#c3cfe0"/>
+  <ellipse cx="1180" cy="860" rx="520" ry="300" fill="#b7d3e8"/>
+  <ellipse cx="300" cy="900" rx="360" ry="240" fill="#d9e1ec"/>
+  <ellipse cx="820" cy="520" rx="300" ry="220" fill="#f3f7ff"/>
+  <g opacity="0.95">
+    <rect x="120" y="420" width="560" height="70" rx="35" fill="#3d8fe0"/>
+    <rect x="420" y="540" width="640" height="64" rx="32" fill="#14335c"/>
+    <rect x="760" y="300" width="520" height="60" rx="30" fill="#7fa9d1"/>
+    <rect x="980" y="660" width="460" height="58" rx="29" fill="#9fb2cc"/>
+    <rect x="220" y="680" width="380" height="56" rx="28" fill="#c9d6e6"/>
+  </g>
+  <circle cx="1480" cy="520" r="120" fill="#5c9ade" opacity="0.5"/>
+  <circle cx="90" cy="600" r="90" fill="#9fb2cc" opacity="0.55"/>
+</svg>
