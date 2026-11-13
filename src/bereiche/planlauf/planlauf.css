@@ -1,0 +1,191 @@
+/* Gestaltung „Gletscher“ für das Planlaufmanagement – wie die Startseite:
+ * weichgezeichnetes Hintergrundbild (src/shared/hintergrund.svg), Seitenleiste, Kopfzeile,
+ * Karten und Dialoge als Flüssigglas, ruhige Blautöne, Bewegung beim Überfahren.
+ *
+ * Alles hängt an der Klasse .app-glas, die App.tsx nur im Farbmodus „standard“ setzt;
+ * der Farbmodus „kontrast“ behält die schlichte, deckende Gestaltung aus global.css.
+ *
+ * Glasflächen im Inhalt (Karten, Dialoge) bekommen bewusst keinen backdrop-filter: Er
+ * machte sie zum Bezugsrahmen fixierter Kinder (Spaltenfilter, Auswahllisten). Das
+ * Hintergrundbild ist ohnehin schon weichgezeichnet, halbdeckendes Weiß reicht. */
+
+.app-glas {
+  /* Farben aus dem KaPlan-Logo: Tinte Dunkelblau, Akzent ein gedecktes Azur */
+  --text: #15233a;
+  --text-secondary: #4f5d72;
+  --text-tertiary: #7a8698;
+  --accent: #1f5fa6;
+  --accent-hover: #184f8c;
+  --accent-soft: rgba(31, 95, 166, 0.12);
+  --bg-active: rgba(31, 95, 166, 0.12);
+  --bg-hover: rgba(255, 255, 255, 0.55);
+  --bg-subtle: rgba(248, 250, 253, 0.7);
+  --fill-gruppe: rgba(236, 242, 249, 0.85);
+  --separator: rgba(21, 35, 58, 0.08);
+  --separator-strong: rgba(21, 35, 58, 0.16);
+
+  --glas: linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62) 60%, rgba(255, 255, 255, 0.74));
+  --glas-kante: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  --glas-schatten: 0 1px 1px rgba(21, 35, 58, 0.04), 0 14px 34px -18px rgba(21, 45, 85, 0.3);
+  --glas-schatten-hoch: 0 2px 2px rgba(21, 35, 58, 0.05), 0 26px 50px -22px rgba(21, 45, 85, 0.42);
+  --ease-glas: cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: relative;
+  isolation: isolate;
+  color: var(--text);
+}
+
+/* ---------- Hintergrundbild ---------- */
+.app-glas::before {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  z-index: -1;
+  background: url("../../shared/hintergrund.svg") center / cover no-repeat;
+  filter: blur(70px) saturate(105%);
+  animation: glas-treiben 42s cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+  pointer-events: none;
+}
+.app-glas::after {
+  /* Weißer Schleier: Der Inhalt braucht mehr Ruhe als die Startseite */
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(244, 247, 251, 0.35);
+  pointer-events: none;
+}
+@keyframes glas-treiben {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(3deg) scale(1.05); }
+  100% { transform: rotate(-2deg) scale(1.02); }
+}
+
+/* ---------- Seitenleiste ---------- */
+.app-glas .sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.42));
+  -webkit-backdrop-filter: saturate(140%) blur(24px);
+  backdrop-filter: saturate(140%) blur(24px);
+  border-right: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: inset -1px 0 0 rgba(21, 35, 58, 0.05);
+}
+.app-glas .nav-item {
+  border-radius: 10px;
+  transition: background-color 0.2s var(--ease-glas), transform 0.25s var(--ease-glas), box-shadow 0.2s var(--ease-glas);
+}
+.app-glas .nav-item:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--glas-kante);
+  transform: translateX(3px);
+}
+.app-glas .nav-item.active {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.22), transparent 55%), var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 18px -10px var(--accent);
+}
+.app-glas .nav-icon { transition: transform 0.3s var(--ease-glas); }
+.app-glas .nav-item:hover .nav-icon { transform: scale(1.12); }
+.app-glas .bearbeiter { background: rgba(255, 255, 255, 0.5); border-color: rgba(255, 255, 255, 0.7); box-shadow: var(--glas-kante); }
+.app-glas .bearbeiter:hover { background: rgba(255, 255, 255, 0.85); }
+
+/* ---------- Kopfzeile ---------- */
+.app-glas .topbar {
+  background: rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: saturate(140%) blur(24px);
+  backdrop-filter: saturate(140%) blur(24px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 1px 0 rgba(21, 35, 58, 0.05);
+}
+
+/* ---------- Karten ---------- */
+.app-glas .card {
+  background: var(--glas);
+  border-radius: 18px;
+  box-shadow: var(--glas-kante), var(--glas-schatten);
+}
+.app-glas .card-click {
+  transition: transform 0.35s var(--ease-glas), box-shadow 0.35s var(--ease-glas), background 0.2s ease;
+}
+.app-glas .card-click:hover {
+  transform: translateY(-3px);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.78));
+  box-shadow: var(--glas-kante), 0 0 0 1px rgba(31, 95, 166, 0.14), var(--glas-schatten-hoch);
+}
+.app-glas .card-click:active { transform: translateY(-1px) scale(0.995); }
+/* Kennzahlen in einer Karte bleiben flach */
+.app-glas .kennzahlen .card { background: none; box-shadow: none; }
+.app-glas .kennzahlen .card-click:hover { transform: none; box-shadow: none; background: rgba(255, 255, 255, 0.6); }
+.app-glas .stat-value { transition: transform 0.3s var(--ease-glas); transform-origin: left center; }
+.app-glas .card-click:hover .stat-value { transform: scale(1.06); }
+
+/* ---------- Tabellen und Listen ---------- */
+/* Die feste Kopfzeile deckt, sonst schimmerten die Zeilen beim Scrollen durch */
+.app-glas .table th { background: rgba(248, 250, 253, 0.96); }
+.app-glas .table tbody tr.clickable,
+.app-glas .list-row.clickable { transition: background-color 0.18s ease, box-shadow 0.18s ease; }
+.app-glas .table tbody tr.clickable:hover,
+.app-glas .list-row.clickable:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ---------- Schaltflächen und Eingaben ---------- */
+.app-glas .btn {
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: var(--glas-kante), 0 1px 2px rgba(21, 35, 58, 0.06);
+  transition: background 0.18s ease, box-shadow 0.25s var(--ease-glas), transform 0.25s var(--ease-glas), opacity 0.12s ease;
+}
+.app-glas .btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-1px);
+  box-shadow: var(--glas-kante), 0 6px 14px -8px rgba(21, 45, 85, 0.35);
+}
+.app-glas .btn:active:not(:disabled) { transform: scale(0.975); }
+.app-glas .btn-primary {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.22), transparent 55%), var(--accent);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 14px -8px var(--accent);
+}
+.app-glas .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.28), transparent 55%), var(--accent-hover);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 10px 20px -10px var(--accent);
+}
+.app-glas .btn-ghost,
+.app-glas .btn-danger { background: transparent; box-shadow: none; }
+.app-glas .btn-ghost:hover:not(:disabled) { background: var(--accent-soft); box-shadow: none; }
+.app-glas .btn-danger:hover:not(:disabled) { background: var(--red-soft); box-shadow: none; }
+.app-glas .btn-outline { background: rgba(255, 255, 255, 0.35); }
+
+.app-glas .input,
+.app-glas .select,
+.app-glas .textarea { background-color: rgba(255, 255, 255, 0.82); border-color: rgba(21, 35, 58, 0.14); }
+.app-glas .input:hover,
+.app-glas .select:hover,
+.app-glas .textarea:hover { background-color: #fff; }
+.app-glas .search { background: rgba(255, 255, 255, 0.6); box-shadow: var(--glas-kante); }
+
+.app-glas .segmented { background: rgba(255, 255, 255, 0.45); box-shadow: var(--glas-kante); }
+.app-glas .segmented button.active { background: #fff; box-shadow: 0 2px 6px -2px rgba(21, 45, 85, 0.25); }
+
+.app-glas .tabs button { transition: color 0.18s ease, border-color 0.25s var(--ease-glas); }
+
+/* ---------- Dialoge ---------- */
+.app-glas .overlay {
+  background: rgba(21, 35, 58, 0.22);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+  backdrop-filter: blur(8px) saturate(120%);
+}
+.app-glas .modal {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.97), rgba(250, 252, 255, 0.92));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(255, 255, 255, 0.6), 0 30px 70px -20px rgba(21, 35, 58, 0.45);
+}
+.app-glas .modal-footer { background: rgba(240, 244, 250, 0.7); }
+
+/* ---------- Ohne Bewegung ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .app-glas::before { animation: none; }
+  .app-glas .nav-item:hover:not(.active),
+  .app-glas .card-click:hover,
+  .app-glas .btn:hover:not(:disabled) { transform: none; }
+  .app-glas .card-click:hover .stat-value,
+  .app-glas .nav-item:hover .nav-icon { transform: none; }
+}

@@ -1,5 +1,5 @@
 /* Startseite (Bereichsauswahl), Neugestaltung „Gletscher“:
- * Ein weichgezeichnetes Hintergrundbild (./hintergrund.svg) treibt langsam und folgt dem
+ * Ein weichgezeichnetes Hintergrundbild (src/shared/hintergrund.svg) treibt langsam und folgt dem
  * Zeiger; darüber liegen Kopf, Bereichskarten und Fußzeile als Flüssigglas – durchscheinend,
  * mit Lichtkante oben, Glanz unter dem Zeiger und leichter Neigung beim Überfahren.
  * Farben und Glas-Werte in ./tokens.css, Grundregeln in ./base.css; alles nur unter .start wirksam. */
@@ -32,7 +32,7 @@
 .start-bild-flaeche {
   position: absolute;
   inset: -12%;
-  background: url("./hintergrund.svg") center / cover no-repeat;
+  background: url("../shared/hintergrund.svg") center / cover no-repeat;
   filter: blur(70px) saturate(105%);
   transform:
     translate3d(calc((var(--px) - 0.5) * -40px), calc((var(--py) - 0.5) * -30px), 0)

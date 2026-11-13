@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
-  <!-- Hintergrundbild der Startseite. Wird in start.css stark weichgezeichnet:
+  <!-- Hintergrundbild der Startseite und des Planlaufmanagements. Wird in
+       src/shell/start.css und src/bereiche/planlauf/planlauf.css stark weichgezeichnet:
        Aus den Farbflächen und den Balken eines Bauzeitenplans werden weiche Schlieren. -->
   <rect width="1600" height="1000" fill="#eef2f7"/>
   <ellipse cx="260" cy="180" rx="420" ry="300" fill="#a9cdf0"/>
